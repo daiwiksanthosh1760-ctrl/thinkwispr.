@@ -2738,6 +2738,16 @@ const WEB_SEARCH_PROVIDERS: Array<{
   description: string;
 }> = [
   {
+    value: 'auto',
+    label: 'Automatic',
+    description: 'Use configured search credentials, or free Parallel search without an API key.',
+  },
+  {
+    value: 'parallel-mcp',
+    label: 'Parallel (free)',
+    description: 'Web search and page reading without an account or API key. No image search.',
+  },
+  {
     value: 'exa',
     label: 'Exa',
     description: 'Enhanced and faster neural web search with images and filtering.',
@@ -2769,7 +2779,7 @@ const GroupModeToggle: React.FC<GroupSelectorProps> = React.memo(
     );
 
     // Get search provider from localStorage with reactive updates
-    const [searchProvider, setSearchProvider] = useLocalStorage<SearchProvider>('scira-search-provider', 'exa');
+    const [searchProvider, setSearchProvider] = useLocalStorage<SearchProvider>('scira-search-provider', 'auto');
     const [providerMenuOpen, setProviderMenuOpen] = useState(false);
     const currentProviderOption = useMemo(
       () => WEB_SEARCH_PROVIDERS.find((option) => option.value === searchProvider) ?? WEB_SEARCH_PROVIDERS[0],
@@ -3488,7 +3498,7 @@ const FormComponent: React.FC<FormComponentProps> = ({
   const hasInteracted = useMemo(() => messages.length > 0, [messages.length]);
 
   // Search groups for the plus menu
-  const [searchProvider] = useSyncedPreferences<SearchProvider>('scira-search-provider', 'exa');
+  const [searchProvider] = useSyncedPreferences<SearchProvider>('scira-search-provider', 'auto');
   const dynamicSearchGroups = useMemo(() => getSearchGroups(searchProvider), [searchProvider]);
   const [visibleModesOuter] = useSyncedPreferences<string[]>('scira-visible-modes', []);
   const [modeOrderOuter] = useSyncedPreferences<string[]>('scira-group-order', []);

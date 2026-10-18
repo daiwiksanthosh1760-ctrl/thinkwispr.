@@ -10,6 +10,7 @@
     "lint": "eslint",
     "typecheck": "tsgo --noEmit",
     "typecheck:watch": "tsgo --noEmit --watch",
+    "test:search": "bun --conditions=react-server test tests/search",
     "fix": "prettier --write . --ignore-path .gitignore",
     "knip": "knip",
     "email:dev": "email dev --dir ./components/emails",
@@ -49,6 +50,7 @@
     "@mathjax/src": "^4.1.1",
     "@mendable/firecrawl-js": "^4.16.0",
     "@modelcontextprotocol/ext-apps": "^1.2.2",
+    "@modelcontextprotocol/sdk": "^1.27.1",
     "@openrouter/ai-sdk-provider": "^2.3.3",
     "@paper-design/shaders-react": "^0.0.71",
     "@pdf-lib/fontkit": "^1.1.1",
@@ -191,6 +193,7 @@
   "devDependencies": {
     "@react-email/preview-server": "^5.2.10",
     "@tailwindcss/postcss": "^4.2.2",
+    "@types/bun": "^1.3.10",
     "@types/canvas-confetti": "^1.9.0",
     "@types/d3-array": "^3.2.2",
     "@types/google.maps": "^3.58.1",

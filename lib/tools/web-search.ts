@@ -9,23 +9,25 @@ import FirecrawlApp, { SearchResultWeb, SearchResultNews, SearchResultImages, Do
 import { all } from 'better-all';
 import { getBetterAllOptions } from '@/lib/better-all';
 
-// Singleton clients - initialized lazily and reused across requests
-let _searchClients: {
-  exa: Exa;
-  parallel: Parallel;
-  firecrawl: FirecrawlApp;
-} | null = null;
-
-function getSearchClients() {
-  if (!_searchClients) {
-    _searchClients = {
-      exa: new Exa(serverEnv.EXA_API_KEY),
-      parallel: new Parallel({ apiKey: serverEnv.PARALLEL_API_KEY }),
-      firecrawl: new FirecrawlApp({ apiKey: serverEnv.FIRECRAWL_API_KEY }),
-    };
-  }
-  return _searchClients;
-}
+// Construct only the selected API client. Image search is optional when the
+// deployment has configured Exa or Parallel without Firecrawl credentials.
+let exaClient: Exa | undefined;
+let parallelClient: Parallel | undefined;
+let firecrawlClient: FirecrawlApp | undefined;
+const getSearchClients = () => ({
+  get exa() {
+    if (!serverEnv.EXA_API_KEY) throw new Error('Exa search requires EXA_API_KEY');
+    return exaClient ??= new Exa(serverEnv.EXA_API_KEY);
+  },
+  get parallel() {
+    if (!serverEnv.PARALLEL_API_KEY) throw new Error('Parallel API search requires PARALLEL_API_KEY');
+    return parallelClient ??= new Parallel({ apiKey: serverEnv.PARALLEL_API_KEY });
+  },
+  get firecrawl() {
+    if (!serverEnv.FIRECRAWL_API_KEY) return undefined;
+    return firecrawlClient ??= new FirecrawlApp({ apiKey: serverEnv.FIRECRAWL_API_KEY });
+  },
+});
 
 const extractDomain = (url: string | null | undefined): string => {
   if (!url || typeof url !== 'string') return '';
@@ -114,7 +116,7 @@ const formatDateForFirecrawl = (dateStr: string): string => {
 class ParallelSearchStrategy implements SearchStrategy {
   constructor(
     private parallel: Parallel,
-    private firecrawl: FirecrawlApp,
+    private firecrawl: FirecrawlApp | undefined,
   ) {}
 
   async search(
@@ -176,6 +178,7 @@ class ParallelSearchStrategy implements SearchStrategy {
                 });
               },
               firecrawlImages: async function () {
+                if (!firecrawl) return { images: [] };
                 return firecrawl
                   .search(query, {
                     sources: ['images'],
@@ -443,7 +446,7 @@ class FirecrawlSearchStrategy implements SearchStrategy {
 class ExaSearchStrategy implements SearchStrategy {
   constructor(
     private exa: Exa,
-    private firecrawl: FirecrawlApp,
+    private firecrawl: FirecrawlApp | undefined,
   ) {}
 
   async search(
@@ -504,6 +507,7 @@ class ExaSearchStrategy implements SearchStrategy {
               });
             },
             firecrawlImages: async function () {
+              if (!firecrawl) return { images: [] };
               return firecrawl
                 .search(query, {
                   sources: ['images'],
@@ -608,12 +612,16 @@ const createSearchStrategy = (
   clients: {
     exa: Exa;
     parallel: Parallel;
-    firecrawl: FirecrawlApp;
+    firecrawl: FirecrawlApp | undefined;
   },
 ): SearchStrategy => {
   const strategies = {
     parallel: () => new ParallelSearchStrategy(clients.parallel, clients.firecrawl),
-    firecrawl: () => new FirecrawlSearchStrategy(clients.firecrawl),
+    firecrawl: () => {
+      const firecrawl = clients.firecrawl;
+      if (!firecrawl) throw new Error('Firecrawl search requires FIRECRAWL_API_KEY');
+      return new FirecrawlSearchStrategy(firecrawl);
+    },
     exa: () => new ExaSearchStrategy(clients.exa, clients.firecrawl),
   };
 
@@ -726,14 +734,7 @@ export function webSearchTool(
         startDates: startDates as (string | null)[] | undefined,
         dataStream,
       };
-      let result = await strategy.search(queries, searchOptions);
-      const hasNoResults = result.searches.every((s) => s.results.length === 0);
-      if (hasNoResults && normalizedProvider !== 'firecrawl') {
-        console.log(`${normalizedProvider} returned no results, falling back to Firecrawl`);
-        const fallbackStrategy = createSearchStrategy('firecrawl', clients);
-        result = await fallbackStrategy.search(queries, searchOptions);
-      }
-      return result;
+      return strategy.search(queries, searchOptions);
     },
   });
 }

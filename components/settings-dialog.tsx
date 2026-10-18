@@ -73,7 +73,7 @@ import { sileo } from 'sileo';
 import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from '@tanstack/react-query';
 import { getAllMemories, deleteMemory, MemoryItem } from '@/lib/memory-actions';
 import { Loader2, Search, Zap, Pencil, Plus, MoreHorizontal, Link2Off } from 'lucide-react';
-import { getSearchGroups, type SearchGroupId } from '@/lib/utils';
+import { getSearchGroups, searchProviderInfo, type SearchGroupId, type SearchProvider } from '@/lib/utils';
 import { models, PROVIDERS, getModelProvider, type ModelProvider } from '@/ai/models';
 import { cn } from '@/lib/utils';
 import { Switch } from '@/components/ui/switch';
@@ -235,11 +235,25 @@ const FirecrawlIcon = ({ className }: { className?: string }) => (
 // Search Provider Options
 const searchProviders = [
   {
+    value: 'auto',
+    label: 'Automatic',
+    description: 'Use configured search credentials, or free Parallel search without an API key',
+    icon: Search,
+    default: true,
+  },
+  {
+    value: 'parallel-mcp',
+    label: 'Parallel (free)',
+    description: 'Web search and page reading without an account or API key. No image search',
+    icon: ParallelIcon,
+    default: false,
+  },
+  {
     value: 'exa',
     label: 'Exa',
     description: 'Enhanced and faster web search with images and advanced filtering',
     icon: ExaIcon,
-    default: true,
+    default: false,
   },
   {
     value: 'firecrawl',
@@ -307,9 +321,9 @@ export function PreferencesSection({
   isCustomInstructionsEnabled?: boolean;
   setIsCustomInstructionsEnabledAction?: (value: boolean | ((val: boolean) => boolean)) => void;
 }) {
-  const [searchProvider, setSearchProvider] = useSyncedPreferences<'exa' | 'parallel' | 'firecrawl'>(
+  const [searchProvider, setSearchProvider] = useSyncedPreferences<SearchProvider>(
     'scira-search-provider',
-    'exa',
+    'auto',
   );
 
   const [extremeSearchModel, setExtremeSearchModel] = useSyncedPreferences<
@@ -393,16 +407,10 @@ export function PreferencesSection({
   const enabled = isCustomInstructionsEnabled ?? true;
   const setEnabled = setIsCustomInstructionsEnabledAction ?? (() => {});
 
-  const handleSearchProviderChange = (newProvider: 'exa' | 'parallel' | 'firecrawl') => {
+  const handleSearchProviderChange = (newProvider: SearchProvider) => {
     setSearchProvider(newProvider);
     sileo.success({
-      title: `Search provider changed to ${
-        newProvider === 'exa'
-          ? 'Exa'
-          : newProvider === 'parallel'
-            ? 'Parallel AI'
-            : 'Firecrawl'
-      }`,
+      title: `Search provider changed to ${searchProviderInfo[newProvider]}`,
       description: 'This will be used for all future searches',
       icon: <Search className="h-4 w-4" />,
     });
