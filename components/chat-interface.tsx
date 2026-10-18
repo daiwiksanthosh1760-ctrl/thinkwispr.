@@ -226,9 +226,9 @@ const ChatInterface = memo(
       false,
     );
 
-    const [searchProvider, _] = useLocalStorage<'exa' | 'parallel' | 'firecrawl'>(
+    const [searchProvider, _] = useLocalStorage<'auto' | 'parallel-mcp' | 'exa' | 'parallel' | 'firecrawl'>(
       'scira-search-provider',
-      'firecrawl',
+      'auto',
     );
 
     const [extremeSearchModel] = useLocalStorage<

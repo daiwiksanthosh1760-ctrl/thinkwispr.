@@ -850,6 +850,7 @@ export async function POST(req: Request) {
         activeToolNames: streamActiveTools,
         dataStream,
         searchProvider,
+        searchSessionId: id,
         timezone,
         contextFiles,
         extremeSearchModel,

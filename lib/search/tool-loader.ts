@@ -1,6 +1,8 @@
 import 'server-only';
 
 import type { SearchProvider } from '@/lib/utils';
+import { resolveSearchProvider } from '@/lib/search/providers';
+import { randomUUID } from 'node:crypto';
 
 type ExtremeSearchModelId =
   | 'scira-ext-1'
@@ -15,6 +17,7 @@ interface LoadConfiguredToolsParams {
   activeToolNames: string[];
   dataStream: any;
   searchProvider: SearchProvider | undefined;
+  searchSessionId?: string;
   timezone: string | undefined;
   contextFiles: Array<{ url: string; contentType: string; name?: string }>;
   extremeSearchModel: ExtremeSearchModelId | undefined;
@@ -28,6 +31,7 @@ export async function loadConfiguredTools({
   activeToolNames,
   dataStream,
   searchProvider,
+  searchSessionId,
   timezone,
   contextFiles,
   extremeSearchModel,
@@ -38,6 +42,8 @@ export async function loadConfiguredTools({
 }: LoadConfiguredToolsParams): Promise<Record<string, any>> {
   const tools: Record<string, any> = {};
   const uniqueToolNames = [...new Set(activeToolNames)];
+  const resolvedSearchProvider = resolveSearchProvider(searchProvider);
+  const sessionId = searchSessionId ?? randomUUID();
   let memoryTools: { searchMemories: any; addMemory: any } | null = null;
 
   await Promise.all(
@@ -69,8 +75,13 @@ export async function loadConfiguredTools({
           return;
         }
         case 'web_search': {
+          if (resolvedSearchProvider === 'parallel-mcp') {
+            const { parallelWebSearchTool } = await import('@/lib/tools/parallel-search');
+            tools.web_search = parallelWebSearchTool(sessionId, dataStream);
+            return;
+          }
           const { webSearchTool } = await import('@/lib/tools/web-search');
-          tools.web_search = webSearchTool(dataStream, searchProvider);
+          tools.web_search = webSearchTool(dataStream, resolvedSearchProvider);
           return;
         }
         case 'academic_search': {
@@ -104,6 +115,11 @@ export async function loadConfiguredTools({
           return;
         }
         case 'retrieve': {
+          if (resolvedSearchProvider === 'parallel-mcp') {
+            const { parallelRetrieveTool } = await import('@/lib/tools/parallel-search');
+            tools.retrieve = parallelRetrieveTool(sessionId);
+            return;
+          }
           const { retrieveTool } = await import('@/lib/tools/retrieve');
           tools.retrieve = retrieveTool;
           return;

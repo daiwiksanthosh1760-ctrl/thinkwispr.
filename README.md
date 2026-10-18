@@ -230,7 +230,7 @@ To run the application locally without Docker:
 1. Sign up for accounts with the required AI providers:
    - OpenAI (required)
    - Anthropic (required)
-   - Exa (required for web search feature)
+   - Search provider accounts are optional for web search (see below)
 2. Copy `.env.example` to `.env.local` and fill in your API keys
 3. Install dependencies:
    ```bash
@@ -241,6 +241,38 @@ To run the application locally without Docker:
    pnpm dev
    ```
 5. Open `http://localhost:3000` in your browser
+
+#### Web search without a search API key
+
+New installations use **Automatic** search. Leave `EXA_API_KEY`,
+`FIRECRAWL_API_KEY`, and `PARALLEL_API_KEY` empty to search and read ordinary web
+pages through [Parallel Search MCP](https://docs.parallel.ai/integrations/mcp/search-mcp).
+Search uses Fast mode with no account or API key. Other application features
+still need their own configuration.
+
+Automatic keeps configured providers: it uses Firecrawl when its key is present,
+then Exa, then the Parallel API. Existing saved provider choices remain selected.
+Choose **Parallel (free)** in the search menu or Settings to use MCP explicitly,
+even on a deployment with API credentials. A selected provider's failure does not
+silently switch to another search provider.
+
+The free provider returns cited text sources. Image search, strict news/date
+filters, and specialized social-media transcripts remain available through the
+existing providers and tools. The service can return quota or availability errors;
+these are reported to the agent. Tool availability continues to follow the chosen
+search mode. Requests use the server's outbound network connection.
+
+To run the search integration tests with Bun:
+
+```bash
+bun install --frozen-lockfile
+bun run test:search
+bun run typecheck
+```
+
+The search tests use an MCP HTTP fixture and a scripted model to exercise the
+application's tool loader, citation results, provider selection, cancellation,
+timeouts, and errors without external credentials.
 
 # License
 

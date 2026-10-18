@@ -204,9 +204,24 @@ function formatSupadataResponse(metadata: SupadataMetadata, url: string, transcr
 
 
 const supadata = new Supadata({ apiKey: serverEnv.SUPADATA_API_KEY });
-const exa = new Exa(serverEnv.EXA_API_KEY as string);
-const parallel = new Parallel({ apiKey: serverEnv.PARALLEL_API_KEY });
-const firecrawl = new FirecrawlApp({ apiKey: serverEnv.FIRECRAWL_API_KEY });
+let exa: Exa | undefined;
+let parallel: Parallel | undefined;
+let firecrawl: FirecrawlApp | undefined;
+
+function getExaClient() {
+  if (!serverEnv.EXA_API_KEY) throw new Error('Exa retrieval requires EXA_API_KEY');
+  return exa ??= new Exa(serverEnv.EXA_API_KEY);
+}
+
+function getParallelClient() {
+  if (!serverEnv.PARALLEL_API_KEY) throw new Error('Parallel API retrieval requires PARALLEL_API_KEY');
+  return parallel ??= new Parallel({ apiKey: serverEnv.PARALLEL_API_KEY });
+}
+
+function getFirecrawlClient() {
+  if (!serverEnv.FIRECRAWL_API_KEY) throw new Error('Firecrawl retrieval requires FIRECRAWL_API_KEY');
+  return firecrawl ??= new FirecrawlApp({ apiKey: serverEnv.FIRECRAWL_API_KEY });
+}
 
 // Helper function to retrieve content from a single URL
 async function retrieveSingleUrl(
@@ -404,7 +419,7 @@ async function retrieveSingleUrl(
     let source = 'exa';
 
     try {
-      result = await exa.getContents([url], {
+      result = await getExaClient().getContents([url], {
         text: true,
         summary: include_summary ? true : undefined,
         livecrawl: live_crawl,
@@ -423,7 +438,7 @@ async function retrieveSingleUrl(
     if (usingParallel) {
       try {
         console.log(`Trying Parallel extract for ${url}`);
-        const parallelResult = await parallel.beta.extract({
+        const parallelResult = await getParallelClient().beta.extract({
           urls: [url],
           excerpts: false,
           full_content: true,
@@ -466,7 +481,7 @@ async function retrieveSingleUrl(
     if (usingFirecrawl) {
       const urlWithoutHttps = url.replace(/^https?:\/\//, '');
       try {
-        const scrapeResponse = await firecrawl.scrape(urlWithoutHttps, {
+        const scrapeResponse = await getFirecrawlClient().scrape(urlWithoutHttps, {
           parsers: ['pdf'],
           proxy: 'auto',
           storeInCache: true,
