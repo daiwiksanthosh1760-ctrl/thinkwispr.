@@ -1,27 +1,30 @@
-/// <reference types="bun" />
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, it as test } from 'node:test';
+import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { generateText, stepCountIs } from 'ai';
 import { MockLanguageModelV3 } from 'ai/test';
 import { loadConfiguredTools } from '@/lib/search/tool-loader';
 import { resolveSearchProvider, type SearchProvider } from '@/lib/search/providers';
 import { parallelRetrieveTool } from '@/lib/tools/parallel-search';
-
 const endpoint = 'https://search.parallel.ai/mcp';
 const originalFetch = globalThis.fetch;
 const originalTimeout = AbortSignal.timeout;
 const originalEnv = { ...process.env };
-const requests: Array<{ url: string; headers: Headers; body?: any; method: string; signal?: AbortSignal | null }> = [];
+const requests: Array<{
+  url: string;
+  headers: Headers;
+  body?: any;
+  method: string;
+  signal?: AbortSignal | null;
+}> = [];
 let mode: 'success' | 'text' | 'tool-error' | 'malformed' | 'http-error' | 'waiting' | 'initializing' = 'success';
 let waiting: (() => void) | undefined;
-
 const pages = [
   { url: 'https://example.com/source', title: 'A cited source', excerpts: ['Useful evidence for the answer.'] },
 ];
-
 function jsonResponse(id: number, result: unknown) {
   return Response.json({ jsonrpc: '2.0', id, result });
 }
-
 function pendingRequest(signal?: AbortSignal | null) {
   waiting?.();
   return new Promise<Response>((_resolve, reject) => {
@@ -29,7 +32,6 @@ function pendingRequest(signal?: AbortSignal | null) {
     signal?.addEventListener('abort', () => reject(signal.reason), { once: true });
   });
 }
-
 beforeEach(() => {
   requests.length = 0;
   mode = 'success';
@@ -81,7 +83,6 @@ beforeEach(() => {
     throw new Error(`Unexpected MCP method: ${body.method}`);
   }) as typeof fetch;
 });
-
 afterEach(() => {
   globalThis.fetch = originalFetch;
   AbortSignal.timeout = originalTimeout;
@@ -89,9 +90,7 @@ afterEach(() => {
   for (const name of Object.keys(process.env)) if (!(name in originalEnv)) delete process.env[name];
   Object.assign(process.env, originalEnv);
 });
-
 const options = { toolCallId: 'fixture-call', messages: [] };
-
 function load(activeToolNames = ['web_search', 'retrieve'], searchProvider?: SearchProvider) {
   return loadConfiguredTools({
     activeToolNames,
@@ -107,35 +106,30 @@ function load(activeToolNames = ['web_search', 'retrieve'], searchProvider?: Sea
     selectedConnectors: [],
   });
 }
-
 describe('provider resolution and activation', () => {
   test('uses anonymous MCP only when unconfigured, keeping credentials and explicit saved choices', () => {
-    expect(resolveSearchProvider(undefined, {})).toBe('parallel-mcp');
-    expect(resolveSearchProvider('auto', { EXA_API_KEY: 'exa' })).toBe('exa');
-    expect(resolveSearchProvider('auto', { PARALLEL_API_KEY: 'parallel' })).toBe('parallel');
-    expect(resolveSearchProvider('auto', { FIRECRAWL_API_KEY: 'firecrawl', EXA_API_KEY: 'exa' })).toBe('firecrawl');
+    assert.equal(resolveSearchProvider(undefined, {}), 'parallel-mcp');
+    assert.equal(resolveSearchProvider('auto', { EXA_API_KEY: 'exa' }), 'exa');
+    assert.equal(resolveSearchProvider('auto', { PARALLEL_API_KEY: 'parallel' }), 'parallel');
+    assert.equal(resolveSearchProvider('auto', { FIRECRAWL_API_KEY: 'firecrawl', EXA_API_KEY: 'exa' }), 'firecrawl');
     for (const provider of ['exa', 'parallel', 'firecrawl', 'parallel-mcp'] as const) {
-      expect(resolveSearchProvider(provider, { EXA_API_KEY: 'exa' })).toBe(provider);
+      assert.equal(resolveSearchProvider(provider, { EXA_API_KEY: 'exa' }), provider);
     }
-    expect(resolveSearchProvider('auto', { EXA_API_KEY: '  ' })).toBe('parallel-mcp');
-    expect(() => resolveSearchProvider('unknown' as SearchProvider, {})).toThrow('Unsupported');
+    assert.equal(resolveSearchProvider('auto', { EXA_API_KEY: '  ' }), 'parallel-mcp');
+    assert.throws(() => resolveSearchProvider('unknown' as SearchProvider, {}), new RegExp('Unsupported'));
   });
-
   test('disabled tools and MCP permissions make no requests', async () => {
-    expect(await load([])).toEqual({});
-    expect(requests).toHaveLength(0);
+    assert.deepEqual(await load([]), {});
+    assert.equal(requests.length, 0);
   });
-
   test('the application environment accepts absent search credentials', () => {
-    const child = Bun.spawnSync([
-      process.execPath,
+    const child = spawnSync(process.execPath, [
       '--conditions=react-server',
       'tests/search/fixtures/paid-provider.ts',
       'none',
     ]);
-    expect(child.exitCode, child.stderr.toString()).toBe(0);
+    assert.equal(child.status, 0, child.stderr.toString());
   });
-
   for (const provider of ['exa', 'parallel', 'firecrawl']) {
     // Firecrawl uses Axios rather than fetch. Its existing search implementation
     // is unchanged; do not send that SDK's fixture credentials to a live server.
@@ -143,54 +137,57 @@ describe('provider resolution and activation', () => {
       test(`preserves ${provider} selection: ${action}`, () => {
         // A separate process gives the real environment validator and singleton
         // API clients fresh state for each intentionally configured provider.
-        const child = Bun.spawnSync([
-          process.execPath,
+        const child = spawnSync(process.execPath, [
           '--conditions=react-server',
           'tests/search/fixtures/paid-provider.ts',
           provider,
           action,
         ]);
-        expect(child.exitCode, child.stdout.toString() + child.stderr.toString()).toBe(0);
+        assert.equal(child.status, 0, child.stdout.toString() + child.stderr.toString());
       });
     }
   }
-
   test('the normal loader discovers lazily, preserves output and project headers, and reuses the conversation ID', async () => {
     const tools = await load();
-    expect(Object.keys(tools).sort()).toEqual(['retrieve', 'web_search']);
-    expect(requests).toHaveLength(0);
+    assert.deepEqual(Object.keys(tools).sort(), ['retrieve', 'web_search']);
+    assert.equal(requests.length, 0);
     const search = await tools.web_search.execute({ queries: ['research objective', 'query variation'] }, options);
-    expect(search.searches[0].results[0]).toMatchObject({ url: pages[0].url, content: pages[0].excerpts[0] });
-    expect(search.searches).toHaveLength(1);
+    assert.equal(search.searches[0].results[0].url, pages[0].url);
+    assert.equal(search.searches[0].results[0].content, pages[0].excerpts[0]);
+    assert.equal(search.searches.length, 1);
     const fetched = await tools.retrieve.execute({ url: [pages[0].url] }, options);
-    expect(fetched.results[0]).toMatchObject({ url: pages[0].url, content: pages[0].excerpts[0] });
+    assert.equal(fetched.results[0].url, pages[0].url);
+    assert.equal(fetched.results[0].content, pages[0].excerpts[0]);
     const calls = requests.filter((request) => request.body?.method === 'tools/call');
-    expect(calls.map((request) => request.body.params.name)).toEqual(['web_search', 'web_fetch']);
-    expect(calls[0].body.params.arguments).toMatchObject({
-      objective: 'research objective',
-      search_queries: ['research objective', 'query variation'],
-    });
-    expect(calls[1].body.params.arguments).toMatchObject({ urls: [pages[0].url], full_content: true });
-    expect(calls[0].body.params.arguments.session_id).toBe(calls[1].body.params.arguments.session_id);
-    expect(calls[0].body.params.arguments.session_id).toHaveLength(64);
+    assert.deepEqual(
+      calls.map((request) => request.body.params.name),
+      ['web_search', 'web_fetch'],
+    );
+    assert.equal(calls[0].body.params.arguments.objective, 'research objective');
+    assert.deepEqual(calls[0].body.params.arguments.search_queries, ['research objective', 'query variation']);
+    assert.deepEqual(calls[1].body.params.arguments.urls, [pages[0].url]);
+    assert.equal(calls[1].body.params.arguments.full_content, true);
+    assert.equal(calls[0].body.params.arguments.session_id, calls[1].body.params.arguments.session_id);
+    assert.equal(calls[0].body.params.arguments.session_id.length, 64);
     const again = await load();
     await again.web_search.execute({ queries: ['next turn'] }, options);
-    expect(
+    assert.equal(
       requests.filter((request) => request.body?.method === 'tools/call').at(-1)?.body.params.arguments.session_id,
-    ).toBe(calls[0].body.params.arguments.session_id);
+      calls[0].body.params.arguments.session_id,
+    );
     for (const request of requests) {
-      expect(request.url).toBe(endpoint);
-      expect(
+      assert.equal(request.url, endpoint);
+      assert.equal(
         request.headers
           .get('User-Agent')
           ?.startsWith('Scira/0.1.0 (https://github.com/daiwiksanthosh1760-ctrl/thinkwispr.)'),
-      ).toBe(true);
-      expect(request.headers.has('Authorization')).toBe(false);
-      expect(request.headers.has('x-api-key')).toBe(false);
-      expect(request.signal?.aborted).toBe(true);
+        true,
+      );
+      assert.equal(request.headers.has('Authorization'), false);
+      assert.equal(request.headers.has('x-api-key'), false);
+      assert.equal(request.signal?.aborted, true);
     }
   });
-
   test('a scripted AI SDK model consumes cited tool results through the maintained loader', async () => {
     const tools = await load(['web_search']);
     let step = 0;
@@ -198,8 +195,8 @@ describe('provider resolution and activation', () => {
       doGenerate: async (call) => {
         const first = step++ === 0;
         if (!first) {
-          expect(JSON.stringify(call.prompt)).toContain(pages[0].url);
-          expect(JSON.stringify(call.prompt)).toContain(pages[0].excerpts[0]);
+          assert.ok(JSON.stringify(call.prompt).includes(pages[0].url));
+          assert.ok(JSON.stringify(call.prompt).includes(pages[0].excerpts[0]));
         }
         return {
           content: first
@@ -222,44 +219,40 @@ describe('provider resolution and activation', () => {
       },
     });
     const result = await generateText({ model, tools, prompt: 'Research this question', stopWhen: stepCountIs(2) });
-    expect(result.text).toContain(pages[0].url);
-    expect(step).toBe(2);
+    assert.ok(result.text.includes(pages[0].url));
+    assert.equal(step, 2);
   });
 });
-
 describe('transport failures and input', () => {
   test('accepts JSON text tool responses', async () => {
     mode = 'text';
     const tools = await load();
-    expect((await tools.web_search.execute({ queries: ['question'] }, options)).searches[0].results).toHaveLength(1);
+    assert.equal((await tools.web_search.execute({ queries: ['question'] }, options)).searches[0].results.length, 1);
   });
-
   for (const failure of ['tool-error', 'malformed', 'http-error'] as const) {
     test(`surfaces ${failure} without choosing a different provider`, async () => {
       mode = failure;
       const tools = await load();
-      await expect(tools.web_search.execute({ queries: ['question'] }, options)).rejects.toThrow();
-      expect(requests.every((request) => request.url === endpoint)).toBe(true);
+      await assert.rejects(tools.web_search.execute({ queries: ['question'] }, options));
+      assert.equal(
+        requests.every((request) => request.url === endpoint),
+        true,
+      );
     });
   }
-
   test('rejects unsafe supplied URLs before contacting MCP', async () => {
     const retrieve = parallelRetrieveTool('conversation-123');
     for (const url of ['file:///etc/passwd', 'javascript:alert(1)', 'https://user:secret@example.com']) {
-      await expect(retrieve.execute!({ url: [url] }, options)).rejects.toThrow();
+      await assert.rejects(retrieve.execute!({ url: [url] }, options));
     }
-    expect(requests).toHaveLength(0);
+    assert.equal(requests.length, 0);
   });
-
   test('an already cancelled tool makes no request', async () => {
     const tools = await load();
     const signal = AbortSignal.abort();
-    await expect(
-      tools.web_search.execute({ queries: ['question'] }, { ...options, abortSignal: signal }),
-    ).rejects.toThrow();
-    expect(requests).toHaveLength(0);
+    await assert.rejects(tools.web_search.execute({ queries: ['question'] }, { ...options, abortSignal: signal }));
+    assert.equal(requests.length, 0);
   });
-
   test('cancellation stops an in-flight call', async () => {
     mode = 'waiting';
     const tools = await load();
@@ -270,17 +263,16 @@ describe('transport failures and input', () => {
     const result = tools.web_search.execute({ queries: ['question'] }, { ...options, abortSignal: controller.signal });
     await started;
     controller.abort();
-    await expect(result).rejects.toThrow();
-    expect(requests.filter((request) => request.body?.method === 'tools/call').at(-1)?.signal?.aborted).toBe(true);
+    await assert.rejects(result);
+    assert.equal(requests.filter((request) => request.body?.method === 'tools/call').at(-1)?.signal?.aborted, true);
   });
-
   test('bounds both initialization and tool execution by the request timeout', async () => {
     AbortSignal.timeout = () => originalTimeout(25);
     const tools = await load();
     for (const delayed of ['initializing', 'waiting'] as const) {
       mode = delayed;
-      await expect(tools.web_search.execute({ queries: ['question'] }, options)).rejects.toThrow();
-      expect(requests.at(-1)?.signal?.aborted).toBe(true);
+      await assert.rejects(tools.web_search.execute({ queries: ['question'] }, options));
+      assert.equal(requests.at(-1)?.signal?.aborted, true);
     }
   });
 });
