@@ -243,7 +243,7 @@ describe('transport failures and input', () => {
   test('rejects unsafe supplied URLs before contacting MCP', async () => {
     const retrieve = parallelRetrieveTool('conversation-123');
     for (const url of ['file:///etc/passwd', 'javascript:alert(1)', 'https://user:secret@example.com']) {
-      await assert.rejects(retrieve.execute!({ url: [url] }, options));
+      await assert.rejects(Promise.resolve(retrieve.execute!({ url: [url] }, options)));
     }
     assert.equal(requests.length, 0);
   });
